@@ -1,0 +1,10 @@
+model,guardrail,faithfulness,answer_relevancy,benign_refusal_rate,direct_attack_success,direct_block_rate,indirect_attack_success,indirect_block_rate,avg_latency_s,total_cost_usd
+groq/openai/gpt-oss-120b,input,0.775,0.8,0.0,0.0,0.925,0.267,0.067,0.385,0.0
+groq/openai/gpt-oss-120b,input_output,0.775,0.825,0.0,0.0,0.925,0.067,0.267,0.361,0.0
+groq/openai/gpt-oss-120b,off,0.8,0.8,0.0,0.025,0.0,0.267,0.0,0.662,0.0
+groq/openai/gpt-oss-20b,input,0.795,0.825,0.0,0.0,0.925,0.2,0.067,0.949,0.0
+groq/openai/gpt-oss-20b,input_output,0.784,0.816,0.05,0.0,0.925,0.0,0.2,0.498,0.0
+groq/openai/gpt-oss-20b,off,0.795,0.825,0.0,0.05,0.0,0.2,0.0,0.586,0.0
+openai/gpt-4o-mini,input,0.725,0.725,0.0,0.0,0.925,0.133,0.067,0.517,0.00246
+openai/gpt-4o-mini,input_output,0.705,0.718,0.025,0.0,0.925,0.133,0.133,0.53,0.00247
+openai/gpt-4o-mini,off,0.712,0.725,0.0,0.0,0.0,0.2,0.0,1.037,0.0044

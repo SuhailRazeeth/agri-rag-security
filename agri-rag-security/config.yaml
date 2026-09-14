@@ -1,0 +1,93 @@
+# ============================================================
+#  Experiment configuration.  Edit freely — no code changes needed.
+# ============================================================
+
+# --- Models to compare, via the LiteLLM gateway ---------------
+# LiteLLM model strings: "<provider>/<model>".
+# !! IMPORTANT: model IDs change often. Run  python -m src.list_models
+#    to see what YOUR keys can use, then paste the valid IDs below.
+# Comment a line out to drop a model from the study.
+models:
+  # --- Groq (verified available on your key) ---
+  - groq/openai/gpt-oss-120b              # Groq — large, high quality
+  - groq/openai/gpt-oss-20b               # Groq — small, cheap/fast
+  # --- OpenAI (confirmed working for you) ---
+  - openai/gpt-4o-mini                    # OpenAI — quality anchor
+  # --- OpenRouter (OFF by default) ---
+  # Free models share a rate-limited pool and will 429 randomly during a long
+  # run, corrupting results. Re-enable ONLY if you add your own provider key at
+  # https://openrouter.ai/settings/integrations  (then free/cheap models are
+  # reliable). Otherwise leave it off — 3 models is a solid study.
+  # - openrouter/google/gemma-4-31b-it:free
+
+# --- Judge model (used by RAGAS + DeepEval as the "LLM judge") --
+# Use a strong, cheap model. This is NOT one of the systems under test.
+judge_model: openai/gpt-4o-mini
+
+# --- Guardrail settings to test (the independent variable) ------
+#   off          : no guardrails
+#   input        : screen the user question before RAG
+#   input_output : screen the question AND the final answer
+guardrail_modes:
+  - "off"
+  - "input"
+  - "input_output"
+
+# --- Defense comparison (src/run_defenses.py) -----------------
+# Baseline defenses to benchmark against each other + your LLM-classifier rail.
+prompt_guard_model: groq/meta-llama/llama-prompt-guard-2-86m
+prompt_guard_threshold: 0.5
+defenses:
+  no_defense:        {input: none,        spotlight: false, output: false}
+  llm_input:         {input: llm,         spotlight: false, output: false}
+  promptguard_input: {input: promptguard, spotlight: false, output: false}
+  spotlight:         {input: none,        spotlight: true,  output: false}
+  llm_output:        {input: llm,         spotlight: false, output: true}
+  spotlight_output:  {input: none,        spotlight: true,  output: true}
+defense_sets:                 # which attack sets to run the defenses over
+  - "attack"                  # direct attacks
+  - "indirect"                # indirect injection
+
+# --- Generation settings --------------------------------------
+temperature: 0.0        # deterministic answers = reproducible study
+max_tokens: 512
+
+# --- Rate limiting (avoid free-tier 429 errors) ---------------
+# Minimum seconds between requests (requests-per-minute cap).
+rate_limits:
+  groq: 2.2
+  openai: 0.0
+  openrouter: 1.5
+
+# Tokens-per-minute budget (rolling 60s). Key by exact model or by provider.
+# Groq free tier caps gpt-oss-20b at 8000 TPM -> set 7000 for safety margin.
+# gpt-oss-120b has a higher cap, so we leave it unthrottled (fast).
+tpm_limits:
+  groq/openai/gpt-oss-20b: 7000
+
+num_retries: 8          # auto-retry with backoff if a 429 still slips through
+
+# --- RAG settings ---------------------------------------------
+embedding_model: sentence-transformers/all-MiniLM-L6-v2   # local, free
+top_k: 4                # retrieved chunks per query
+chunk_max_chars: 1200   # KB document size
+
+# --- Sample sizes (KEEP SMALL to control API cost) -------------
+benign_sample_size: 40     # agriculture QA questions for faithfulness
+attack_sample_size: 40     # prompt-injection / domain attacks for security
+random_seed: 42
+
+# --- Datasets (HuggingFace ids) -------------------------------
+datasets:
+  # Agriculture QA — used both as KB source and benign eval set.
+  agri_qa: "KisanVaani/agriculture-qa-english-only"
+  # Public prompt-injection attacks.
+  prompt_injections: "deepset/prompt-injections"
+  # Your hand-written, domain-specific agri-economics attacks.
+  domain_attacks: "data/domain_attacks.jsonl"
+
+# --- Paths ----------------------------------------------------
+paths:
+  data_dir: "data"
+  results_dir: "results"
+  chroma_dir: "chroma_db"

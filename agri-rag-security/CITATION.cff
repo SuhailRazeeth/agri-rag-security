@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software or dataset, please cite it as below."
+title: "Secure and Faithful RAG Advisory: A Domain-Specific Benchmark of Guardrail Strategies against Direct and Indirect Prompt Injection in Agricultural Economics"
+abstract: >-
+  A reproducible benchmark and harness for evaluating the security (direct and
+  indirect prompt injection) and faithfulness of a retrieval-augmented
+  agricultural-economics advisory assistant, comparing six defense
+  configurations including Meta Llama Prompt Guard 2 and spotlighting.
+authors:
+  - family-names: "[LAST NAME]"
+    given-names: "[FIRST NAME]"
+    affiliation: "South Eastern University of Sri Lanka"
+    # orcid: "https://orcid.org/0000-0000-0000-0000"
+keywords:
+  - large language models
+  - retrieval-augmented generation
+  - prompt injection
+  - indirect prompt injection
+  - AI security
+  - guardrails
+  - agricultural informatics
+license: MIT
+version: 1.0.0
+date-released: "2026-01-01"
+# After you mint a Zenodo DOI, add it here:
+# doi: "10.5281/zenodo.XXXXXXX"
+# repository-code: "https://github.com/USERNAME/agri-rag-security"
