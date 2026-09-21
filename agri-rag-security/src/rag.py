@@ -40,6 +40,7 @@ class RAGBot:
         extra_context: str = "",
         injected_docs: list[str] | None = None,
         spotlight: bool = False,
+        context_docs: list[str] | None = None,
     ) -> tuple[LLMResult, list[str]]:
         """Return (LLMResult, contexts).
 
@@ -48,10 +49,15 @@ class RAGBot:
         spotlight: apply the 'spotlighting' defense — mark retrieved text as
         untrusted data and instruct the model never to follow instructions inside it.
         """
-        contexts = self.retrieve(query)
-        if injected_docs:
-            # A poisoned document appears first, as if it were a top retrieval hit.
-            contexts = list(injected_docs) + list(contexts)
+        if context_docs is not None:
+            # Use exactly the supplied context (e.g. after context-side filtering);
+            # bypass retrieval and injection entirely.
+            contexts = list(context_docs)
+        else:
+            contexts = self.retrieve(query)
+            if injected_docs:
+                # A poisoned document appears first, as if a top retrieval hit.
+                contexts = list(injected_docs) + list(contexts)
 
         system = SYSTEM_PROMPT
         if spotlight:

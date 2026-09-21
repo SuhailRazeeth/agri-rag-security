@@ -1,0 +1,7 @@
+Highlights
+
+- First security benchmark of a RAG advisory assistant for agriculture
+- Input-side guardrails, including Prompt Guard 2, fail on indirect injection
+- Spotlighting and output filtering cut attack success (p<0.0001)
+- The strongest defense still degrades fivefold under adaptive attack
+- Benchmark, attack taxonomy and evaluation harness released openly
