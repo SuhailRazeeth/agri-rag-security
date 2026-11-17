@@ -15,6 +15,12 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # 1) Load API keys from .env into the environment (LiteLLM reads them from there).
 load_dotenv(ROOT / ".env")
+# Optional second Groq account (co-author's own key): a process started with
+# GROQ_KEY_SLOT=2 uses GROQ_API_KEY_2 instead of GROQ_API_KEY. Results do not
+# depend on which account sends the request.
+_slot = os.getenv("GROQ_KEY_SLOT")
+if _slot and os.getenv(f"GROQ_API_KEY_{_slot}"):
+    os.environ["GROQ_API_KEY"] = os.environ[f"GROQ_API_KEY_{_slot}"]
 
 # 2) Load experiment configuration.
 with open(ROOT / "config.yaml", "r", encoding="utf-8") as f:

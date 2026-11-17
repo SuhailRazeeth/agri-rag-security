@@ -1,0 +1,15 @@
+{
+  "title": "Guardrail Placement against Prompt Injection in Retrieval-Augmented Agricultural Advisory Systems: Benchmark and Code",
+  "upload_type": "software",
+  "description": "<p>Benchmark, code, and raw results for the study of guardrail placement against direct and indirect prompt injection in a retrieval-augmented agricultural-economics advisory assistant. The release covers eight guardrail configurations (including Meta Llama Prompt Guard 2, spotlighting, output rails, and retrieved-document screening) on three language models, Studies S1 to S8, and the human validation of the LLM judges. Version 2.0.0 accompanies the revised manuscript.</p>",
+  "creators": [
+    {"name": "Suhail Razeeth, M. S.", "affiliation": "South Eastern University of Sri Lanka"},
+    {"name": "Munzeef Ahamed, M. M.", "affiliation": "South Eastern University of Sri Lanka"}
+  ],
+  "license": "MIT",
+  "version": "2.0.0",
+  "keywords": ["large language models", "retrieval-augmented generation", "prompt injection", "indirect prompt injection", "AI security", "guardrails", "agricultural informatics"],
+  "related_identifiers": [
+    {"identifier": "https://github.com/SuhailRazeeth/agri-rag-security/tree/v2.0.0", "relation": "isSupplementTo", "scheme": "url"}
+  ]
+}

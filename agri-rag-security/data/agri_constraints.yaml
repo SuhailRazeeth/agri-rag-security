@@ -1,0 +1,147 @@
+# ============================================================================
+#  Agronomic & Agri-Economic Constraint Base (ACB)
+#  Used by src/constraint_verifier.py  (Domain-Constraint Evidence Verifier)
+# ----------------------------------------------------------------------------
+#  Each family is an ADVISORY-SAFETY INVARIANT derived from an authoritative
+#  norm. A retrieved document is rejected if any claim it makes violates one.
+#  This is operator-maintained trusted knowledge: in deployment it is refreshed
+#  from the official sources listed under `source`.
+#
+#  !! VERIFY BEFORE PUBLISHING: every entry marked  verify: true  must be checked
+#     against the cited source (values are conservative plausibility envelopes,
+#     deliberately wide, NOT precise market data).
+# ============================================================================
+
+version: 1
+
+# ---------------------------------------------------------------------------
+# I1  Label-compliance invariant (pesticides / agrochemicals)
+#     Source: FAO & WHO, International Code of Conduct on Pesticide Management
+#     (2014) - use strictly per label, observe pre-harvest intervals, PPE,
+#     protect vulnerable groups, safe storage.
+# ---------------------------------------------------------------------------
+label_compliance:
+  max_label_multiplier: 1.0          # any advised rate above label rate violates
+  forbid:
+    - undiluted_application          # applying concentrate without label dilution
+    - skip_pre_harvest_interval      # spraying inside the PHI / "PHI optional"
+    - reduced_ppe                    # "gloves unnecessary", "cloth over mouth is enough"
+    - vulnerable_exposure            # children, pregnant workers, re-entry "immediately"
+    - unsafe_storage                 # food/drink containers, kitchen storage
+    - unsafe_tank_mix                # "any mix at full strength is completely safe"
+    - uncontained_rodenticide        # loose bait scattered on stored grain / food
+    - spray_on_edible_before_harvest
+
+# Pesticides banned or severely restricted for agricultural use.
+# Sources: Stockholm Convention Annexes A/B; Sri Lanka Registrar of Pesticides
+# banned-pesticide list.  verify: true
+banned_substances:
+  - {name: DDT,             source: "Stockholm Convention Annex B (vector control only)"}
+  - {name: endosulfan,      source: "Stockholm Convention Annex A (2011)"}
+  - {name: paraquat,        source: "Sri Lanka Registrar of Pesticides (banned 2008-2011)", verify: true}
+  - {name: methamidophos,   source: "Sri Lanka Registrar of Pesticides", verify: true}
+  - {name: monocrotophos,   source: "Sri Lanka Registrar of Pesticides", verify: true}
+  - {name: dieldrin,        source: "Stockholm Convention Annex A"}
+  - {name: aldrin,          source: "Stockholm Convention Annex A"}
+  - {name: lindane,         source: "Stockholm Convention Annex A (2009)"}
+
+# ---------------------------------------------------------------------------
+# I2  No-guarantee invariant (market & financial claims)
+#     Agricultural prices and returns are stochastic; advisory material may
+#     report ranges or forecasts but never CERTAIN prices, returns, or payouts.
+#     Source: standard agricultural-extension and consumer-finance guidance.
+# ---------------------------------------------------------------------------
+no_guarantee:
+  forbid:
+    - guaranteed_price               # "guaranteed", "fixed", "confirmed" future price
+    - guaranteed_return              # "risk-free", "assured profit", "doubling"
+    - certain_price_movement         # "certain crash", "will triple"
+    - guaranteed_payout              # insurance/grant "automatic full payout"
+  # a stated monthly return above this is treated as implausible
+  max_plausible_monthly_return_pct: 3.0
+  # a stated monthly interest rate above this is treated as predatory
+  max_fair_monthly_interest_pct: 3.0
+
+# ---------------------------------------------------------------------------
+# I3  Official-figure invariant (verify-before-trust)
+#     A document asserting an OFFICIAL price / subsidy / grant figure must agree
+#     with the trusted registry within `tolerance`; official figures for schemes
+#     that are not in the registry are "unverifiable" and rejected when stated
+#     as official or guaranteed.
+# ---------------------------------------------------------------------------
+official_figures:
+  tolerance: 0.40                    # +-40% plausibility envelope
+  # Plausibility envelopes, Sri Lanka, LKR.  verify: true
+  # Source to refresh from: HARTI weekly food-commodity bulletin; Paddy
+  # Marketing Board; Dept. of Agriculture; National Fertilizer Secretariat.
+  price_bands:
+    paddy:          {unit: LKR/kg,    low: 80,    high: 200,   verify: true}
+    rice:           {unit: LKR/kg,    low: 150,   high: 400,   verify: true}
+    big_onion:      {unit: LKR/kg,    low: 100,   high: 700,   verify: true}
+    onion:          {unit: LKR/kg,    low: 100,   high: 700,   verify: true}
+    green_chilli:   {unit: LKR/kg,    low: 150,   high: 1500,  verify: true}
+    coconut:        {unit: LKR/nut,   low: 40,    high: 250,   verify: true}
+    maize:          {unit: LKR/kg,    low: 60,    high: 200,   verify: true}
+    milk:           {unit: LKR/litre, low: 90,    high: 250,   verify: true}
+    urea:           {unit: LKR/50kg,  low: 5000,  high: 20000, verify: true}
+  # Registered schemes and what an honest document may say about them.
+  # status: active | unknown.  Amounts are left null unless verified; a
+  # document stating an amount for a scheme with amount=null is "unverifiable".
+  schemes:
+    paddy_fertilizer_subsidy:  {status: active,  amount: null, unit: LKR/ha, verify: true}
+    seed_subsidy:              {status: active,  amount: null, verify: true}
+    crop_insurance:            {status: active,  premium_zero: false, auto_payout: false, verify: true}
+    tea_replanting_subsidy:    {status: active,  amount: null, verify: true}
+    drip_irrigation_support:   {status: active,  free_for_all: false, verify: true}
+    paddy_purchasing_programme: {status: active,  registration_fee: false, verify: true}
+
+# ---------------------------------------------------------------------------
+# I4  Credential & payment-safety invariant (fraud)
+#     Government schemes never ask farmers for PINs, OTPs, passwords, or
+#     payments/commissions to individuals. Source: Central Bank of Sri Lanka
+#     public fraud advisories; standard anti-fraud guidance.
+# ---------------------------------------------------------------------------
+credential_safety:
+  forbid:
+    - credential_request             # PIN, OTP, password, NIC, bank login
+    - payment_to_individual          # fees / commissions to a named person/number
+    - surrender_title_document       # handing original land title to a broker
+    - unlicensed_lender_endorsement
+
+# ---------------------------------------------------------------------------
+# I5  Neutrality invariant (commercial steering)
+#     Public advisory must not steer to a single vendor or disparage official /
+#     accredited sources. Source: public extension-service neutrality norms.
+# ---------------------------------------------------------------------------
+neutrality:
+  forbid:
+    - exclusive_vendor               # "only Brand-X", "never mention alternatives"
+    - disparage_official_source      # "government outlets sell fakes"
+    - referral_or_dealer_link        # affiliate / dealer links in advice
+    - counterfeit_accusation         # "competitors are counterfeit"
+
+# ---------------------------------------------------------------------------
+# I6  Legality invariant
+#     Advice must not recommend unlawful acts. Source: national labour,
+#     water-rights, and lending law.
+# ---------------------------------------------------------------------------
+legality:
+  forbid:
+    - below_minimum_wage
+    - illegal_water_diversion
+    - loan_fraud                     # inflating declared value, stopping repayment on false write-off
+    - banned_substance_use
+
+# ---------------------------------------------------------------------------
+# I7  Agronomic-soundness invariant
+#     Claims that contradict settled agronomy. Source: Dept. of Agriculture
+#     extension guidance; FAO good agricultural practices.
+# ---------------------------------------------------------------------------
+agronomic_soundness:
+  forbid:
+    - zero_risk_claim                # "zero disease risk", "no risk at all"
+    - fertilizer_overapplication     # "5x urea is harmless"
+    - skip_quarantine                # mix new animals with no quarantine
+    - soil_salting                   # table salt improves soil
+    - no_contingency_reserve         # spend full budget, no reserve
+    - sign_without_reading

@@ -47,10 +47,11 @@ def _telemetry(res):
     return (0.0, 0.0) if r is None else (r.latency_s, r.cost_usd)
 
 
-def run(models=None, sets=None, out_name="raw_defenses.csv"):
+def run(models=None, sets=None, out_name="raw_defenses.csv", config_key="defenses", only=None):
     """models/sets default to config; out_name lets a variant run (e.g. an
     expanded attack set, or a single model) write to its own file so it does not
-    invalidate the resume state of the main study."""
+    invalidate the resume state of the main study. config_key="defenses_revision"
+    adds document screening and the layered defense (revision replication)."""
     models = models or CFG["models"]
     sets = sets or CFG.get("defense_sets", ["attack", "indirect"])
 
@@ -60,20 +61,24 @@ def run(models=None, sets=None, out_name="raw_defenses.csv"):
     needed |= {provider_key_for(CFG.get("prompt_guard_model", "groq/x"))}
     require_keys(*(n for n in needed if n))
 
-    defenses = CFG["defenses"]
+    defenses = CFG[config_key]
+    if only:                                # run a subset (split across API keys)
+        defenses = {k: v for k, v in defenses.items() if k in only}
     items = {s: _items_for_set(s) for s in sets}
     per_combo = sum(len(items[s]) for s in sets)
     print(f"[defenses] {len(defenses)} defenses x {len(models)} model(s) "
           f"x {per_combo} attacks/combo over sets {sets} -> {out_name}")
 
     out_path = PATHS["results"] / out_name
-    rows, done = [], set()
+    rows, done, done_items = [], set(), set()
     if out_path.exists():
         prev = pd.read_csv(out_path)
         rows = prev.to_dict("records")
         counts = prev.groupby(["model", "defense"]).size()
         done = {(m, d) for (m, d), n in counts.items() if n >= per_combo}
+        done_items = {(r["model"], r["defense"], r["set"], str(r["id"])) for r in rows}
         print(f"[resume] {len(prev)} rows; skipping {len(done)} finished combo(s).")
+    per_item = config_key != "defenses"     # revision runs save after every item
 
     import litellm
     for model in models:
@@ -92,6 +97,8 @@ def run(models=None, sets=None, out_name="raw_defenses.csv"):
                         items[set_name], desc=f"{dname:16s} {set_name} {model.split('/')[-1]}",
                         leave=False,
                     ):
+                        if per_item and (model, dname, set_name, str(aid)) in done_items:
+                            continue
                         res = defended_answer(bot, query, dcfg, judge, injected_docs=injected)
                         lat, cost = _telemetry(res)
                         desc = (goal if set_name == "attack"
@@ -103,6 +110,9 @@ def run(models=None, sets=None, out_name="raw_defenses.csv"):
                             "block_stage": res["stage"], "pg_score": res.get("pg_score"),
                             "latency_s": lat, "cost_usd": cost, **sec,
                         })
+                        if per_item:             # save every item (daily caps)
+                            rows.append(combo_rows.pop())
+                            pd.DataFrame(rows).to_csv(out_path, index=False)
             except litellm.RateLimitError as e:
                 # Daily/rate cap for this model — discard the partial combo, skip the
                 # rest of this model's defenses, and move on. Resume finishes it later.
@@ -127,5 +137,9 @@ if __name__ == "__main__":
                     help="which attack sets to run: attack and/or indirect")
     ap.add_argument("--out", default="raw_defenses.csv",
                     help="output filename under results/")
+    ap.add_argument("--config-key", default="defenses",
+                    help="defenses (six core) or defenses_revision (+ doc_screen, layered)")
+    ap.add_argument("--defenses", nargs="*", default=None,
+                    help="run only these defense configurations")
     a = ap.parse_args()
-    run(a.models, a.sets, a.out)
+    run(a.models, a.sets, a.out, a.config_key, a.defenses)

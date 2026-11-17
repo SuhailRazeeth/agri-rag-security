@@ -44,6 +44,27 @@ defenses:
   spotlight:         {input: none,        spotlight: true,  output: false}
   llm_output:        {input: llm,         spotlight: false, output: true}
   spotlight_output:  {input: none,        spotlight: true,  output: true}
+# Revision (Run A): the six defenses above plus document-side screening, i.e. the
+# LLM classifier applied to every retrieved passage (flagged passages removed).
+defenses_revision:
+  no_defense:        {input: none,        spotlight: false, output: false}
+  llm_input:         {input: llm,         spotlight: false, output: false}
+  promptguard_input: {input: promptguard, spotlight: false, output: false}
+  spotlight:         {input: none,        spotlight: true,  output: false}
+  llm_output:        {input: llm,         spotlight: false, output: true}
+  spotlight_output:  {input: none,        spotlight: true,  output: true}
+  doc_screen:        {input: none,        spotlight: false, output: false, doc_screen: true}
+  # revision Run G: defence in depth = document screening + spotlighting + output rail
+  layered:           {input: none,        spotlight: true,  output: true,  doc_screen: true}
+
+# Published paid-tier list prices, USD per 1M tokens (checked Nov 2026), used to
+# price every call realistically even when it ran on a free tier.
+list_prices:
+  openai/gpt-4o-mini:                       {input: 0.15,  output: 0.60}
+  groq/openai/gpt-oss-120b:                 {input: 0.15,  output: 0.60}
+  groq/openai/gpt-oss-20b:                  {input: 0.075, output: 0.30}
+  groq/meta-llama/llama-prompt-guard-2-86m: {input: 0.04,  output: 0.04}
+
 defense_sets:                 # which attack sets to run the defenses over
   - "attack"                  # direct attacks
   - "indirect"                # indirect injection
@@ -64,8 +85,24 @@ rate_limits:
 # gpt-oss-120b has a higher cap, so we leave it unthrottled (fast).
 tpm_limits:
   groq/openai/gpt-oss-20b: 7000
+  groq/openai/gpt-oss-120b: 7000      # free tier now 8000 TPM for every model
+  groq/qwen/qwen3.8-27b: 7000
 
 num_retries: 8          # auto-retry with backoff if a 429 still slips through
+
+# --- Verifier study (src/gen_stealth_attacks.py, src/run_verifier.py) --------
+# All FREE Groq models. Each model has its own daily cap, so roles are spread.
+#   detector_model : runs BOTH the LLM injection classifier and the DCV
+#                    extractor -> same base model, so any difference between
+#                    them is due to the method, not the model.
+#   judge          : gpt-oss-120b with the second-judge rubric already
+#                    validated in the paper (kappa = 0.904 vs gpt-4o-mini).
+verifier_study:
+  target: groq/openai/gpt-oss-20b
+  judge: groq/openai/gpt-oss-120b
+  detector_model: groq/qwen/qwen3.8-27b
+  attack_gen_model: groq/openai/gpt-oss-120b
+  claim_check_model: groq/qwen/qwen3.8-27b
 
 # --- RAG settings ---------------------------------------------
 embedding_model: sentence-transformers/all-MiniLM-L6-v2   # local, free

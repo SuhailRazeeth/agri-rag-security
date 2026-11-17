@@ -72,7 +72,9 @@ def run(rounds: int, target: str, defenses: list[str]):
                  provider_key_for(ATTACKER))
 
     attacks = _load_indirect()
-    cfgs = {k: v for k, v in CFG["defenses"].items() if k in defenses}
+    # defenses_revision adds doc_screen (LLM classifier on every retrieved passage)
+    all_cfgs = CFG.get("defenses_revision", CFG["defenses"])
+    cfgs = {k: v for k, v in all_cfgs.items() if k in defenses}
     print(f"[adaptive] {len(attacks)} attacks x {len(cfgs)} defenses x up to "
           f"{rounds} rounds, target={target}")
 
@@ -81,18 +83,18 @@ def run(rounds: int, target: str, defenses: list[str]):
     if out_path.exists():
         prev = pd.read_csv(out_path)
         rows = prev.to_dict("records")
-        counts = prev.groupby(["model", "defense"]).size()
-        done = {(m, d) for (m, d), n in counts.items() if n >= len(attacks)}
-        print(f"[resume] {len(prev)} rows; skipping {len(done)} finished combo(s).")
+        done = {(r["model"], r["defense"], r["id"]) for r in rows}   # per-item resume
+        print(f"[resume] {len(prev)} rows already saved.")
 
     bot = RAGBot(target)
     for dname, dcfg in cfgs.items():
-        if (target, dname) in done:
+        todo = [a for a in attacks if (target, dname, a["id"]) not in done]
+        if not todo:
             print(f"[skip] {target} | {dname}")
             continue
-        combo = []
+        combo = rows                     # each finished item is appended and saved
         try:
-            for item in tqdm(attacks, desc=f"adaptive {dname}", leave=False):
+            for item in tqdm(todo, desc=f"adaptive {dname}", leave=False):
                 doc = item["poisoned_doc"]
                 goal = item["malicious_goal"]
                 desc = f"A poisoned document tried to make the assistant: {goal}."
@@ -124,13 +126,11 @@ def run(rounds: int, target: str, defenses: list[str]):
                                            else succeeded_round),
                     "final_answer": answer[:500],
                 })
+                pd.DataFrame(rows).to_csv(out_path, index=False)
         except litellm.RateLimitError as e:
             print(f"\n[limit] {target} rate/daily limit - stopping this defense; "
                   f"re-run to resume.\n  {str(e)[:120]}")
             break
-
-        rows.extend(combo)
-        pd.DataFrame(rows).to_csv(out_path, index=False)
         print(f"[saved] {target} | {dname} ({len(rows)} rows)")
 
     d = pd.DataFrame(rows)

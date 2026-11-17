@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import litellm
@@ -80,6 +81,41 @@ def _parse_retry_seconds(err: str, default: float = 8.0) -> float:
     return (float(m.group(1)) + 1.0) if m else default
 
 
+# --- End-to-end call accounting ------------------------------------------------
+# Inside `with meter() as calls:` every chat() call (generation, guardrails,
+# Prompt Guard) is appended to `calls`, tagged with the role set by call_role().
+_METER: list | None = None
+_ROLE = ["generation"]
+
+
+@contextmanager
+def meter():
+    global _METER
+    prev, _METER = _METER, []
+    try:
+        yield _METER
+    finally:
+        _METER = prev
+
+
+@contextmanager
+def call_role(name: str):
+    prev, _ROLE[0] = _ROLE[0], name
+    try:
+        yield
+    finally:
+        _ROLE[0] = prev
+
+
+def list_cost(model: str, p_tok: int, c_tok: int) -> float:
+    """Cost at published paid-tier list prices (config: list_prices, USD per 1M
+    tokens), so free-tier calls are still priced realistically."""
+    price = (CFG.get("list_prices") or {}).get(model)
+    if not price:
+        return 0.0
+    return (p_tok * float(price["input"]) + c_tok * float(price["output"])) / 1e6
+
+
 @dataclass
 class LLMResult:
     text: str
@@ -95,6 +131,7 @@ def chat(
     messages: list[dict],
     temperature: float | None = None,
     max_tokens: int | None = None,
+    response_format: dict | None = None,
 ) -> LLMResult:
     """Single chat completion through the gateway. Returns text + telemetry."""
     temperature = CFG["temperature"] if temperature is None else temperature
@@ -106,6 +143,8 @@ def chat(
         temperature=temperature,
         max_tokens=max_tokens,
     )
+    if response_format is not None:     # e.g. {"type": "json_object"} (OpenAI)
+        kwargs["response_format"] = response_format
     # gpt-oss / reasoning models spend tokens "thinking" before answering.
     # Keep reasoning light so the token budget goes to the actual answer.
     if "gpt-oss" in model or "reasoning" in model:
@@ -114,22 +153,30 @@ def chat(
     est = _estimate_tokens(messages, max_tokens)
     max_attempts = int(CFG.get("num_retries", 8)) + 1
 
-    t0 = time.perf_counter()
+    # latency = time inside the successful API call only. Client-side rate-limit
+    # waits and retry back-off are excluded: they are artefacts of free-tier
+    # quotas, not of the defense being measured.
+    latency = 0.0
     resp = None
     for attempt in range(max_attempts):
         _throttle(model, est)           # respect RPM + TPM before every attempt
         try:
+            t_call = time.perf_counter()
             resp = litellm.completion(**kwargs)
+            latency = time.perf_counter() - t_call
             break
         except litellm.RateLimitError as e:      # our own backoff (more reliable here)
             emsg = str(e).lower()
             wait = _parse_retry_seconds(str(e), default=8.0)
             # A daily cap (TPD) or a long wait can't be retried away — fail fast so
             # the caller can skip this model and resume tomorrow.
-            if "per day" in emsg or "tpd" in emsg or wait > 40 or attempt == max_attempts - 1:
+            # An exhausted balance/quota is reported as 429 too, but never recovers.
+            no_credit = ("insufficient_quota" in emsg or "credit_balance" in emsg
+                         or "no credits" in emsg)
+            if (no_credit or "per day" in emsg or "tpd" in emsg or wait > 40
+                    or attempt == max_attempts - 1):
                 raise
             time.sleep(wait)
-    latency = time.perf_counter() - t0
 
     msg = resp.choices[0].message
     text = msg.content or ""
@@ -146,6 +193,12 @@ def chat(
     p_tok = getattr(usage, "prompt_tokens", 0) or 0
     c_tok = getattr(usage, "completion_tokens", 0) or 0
     _record_tokens(model, (p_tok + c_tok) or est)   # feed the TPM budget tracker
+
+    if _METER is not None:                          # end-to-end accounting
+        _METER.append({"role": _ROLE[0], "model": model, "latency_s": latency,
+                       "prompt_tokens": p_tok, "completion_tokens": c_tok,
+                       "provider_cost_usd": cost,
+                       "list_cost_usd": list_cost(model, p_tok, c_tok)})
 
     return LLMResult(
         text=text.strip(),

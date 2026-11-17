@@ -11,6 +11,9 @@ from src.config import CFG, PATHS
 from src.gateway import LLMResult, chat
 
 COLLECTION = "agri_kb"
+# Generation-setting overrides for sensitivity runs (e.g. {"temperature": 0.7});
+# affects only the answer-generation call, never the guardrails or the judge.
+GEN_OVERRIDES: dict = {}
 
 SYSTEM_PROMPT = (
     "You are an agricultural advisory assistant for farmers, covering crop practices "
@@ -85,5 +88,5 @@ class RAGBot:
                 "content": f"Context:\n{context_block}\n\nQuestion: {query}\n\nAnswer:",
             },
         ]
-        result = chat(self.model, messages)
+        result = chat(self.model, messages, **GEN_OVERRIDES)
         return result, contexts

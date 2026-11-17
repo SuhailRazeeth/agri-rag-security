@@ -11,7 +11,7 @@ refusal instead of the model's answer.
 from __future__ import annotations
 
 from src.config import CFG
-from src.gateway import simple
+from src.gateway import call_role, simple
 
 REFUSAL_MESSAGE = (
     "I can't help with that request. I can, however, answer legitimate questions "
@@ -44,9 +44,13 @@ Answer:"""
 
 def _judge(prompt: str, judge_model: str) -> bool:
     """Return True if the rail says BLOCK."""
+    # reasoning models (gpt-oss) spend output tokens thinking before the verdict
+    budget = 300 if "gpt-oss" in judge_model else 5
     try:
-        verdict = simple(judge_model, prompt, temperature=0.0, max_tokens=5).upper()
-    except Exception:
+        verdict = simple(judge_model, prompt, temperature=0.0, max_tokens=budget).upper()
+    except Exception as e:
+        if "ratelimit" in type(e).__name__.lower():
+            raise         # a quota/daily cap must stop the run, not count as ALLOW
         return False  # fail-open on classifier error; logged upstream
     return "BLOCK" in verdict
 
@@ -72,7 +76,9 @@ def prompt_guard_input_rail(text: str) -> tuple[bool, float]:
     try:
         out = simple(model, text, temperature=0.0, max_tokens=10)
         score = float(out.strip())
-    except Exception:
+    except Exception as e:
+        if "ratelimit" in type(e).__name__.lower():
+            raise                 # quota/daily cap must stop the run
         return True, 0.0          # fail-open on classifier error
     return (score < threshold), score
 
@@ -90,33 +96,47 @@ def defended_answer(bot, query: str, defense: dict, judge_model: str, injected_d
     score = None
 
     # --- input rail ---
-    if inp == "llm":
-        allowed, _ = apply_input_rail(query, judge_model)
-        if not allowed:
-            return _blocked(stage="input", pg_score=score)
-    elif inp == "promptguard":
-        allowed, score = prompt_guard_input_rail(query)
-        if not allowed:
-            return _blocked(stage="input", pg_score=score)
+    with call_role("guard"):
+        if inp == "llm":
+            allowed, _ = apply_input_rail(query, judge_model)
+            if not allowed:
+                return _blocked(stage="input", pg_score=score)
+        elif inp == "promptguard":
+            allowed, score = prompt_guard_input_rail(query)
+            if not allowed:
+                return _blocked(stage="input", pg_score=score)
 
-    result, contexts = bot.answer(
-        query, injected_docs=injected_docs, spotlight=bool(defense.get("spotlight"))
-    )
+    # --- document-side screening: same LLM classifier on every passage ---
+    n_removed = 0
+    if defense.get("doc_screen"):
+        ctx = list(injected_docs or []) + list(bot.retrieve(query))
+        with call_role("guard"):
+            keep = [d for d in ctx if apply_input_rail(d, judge_model)[0]]
+        n_removed = len(ctx) - len(keep)
+        result, contexts = bot.answer(query, context_docs=keep,
+                                      spotlight=bool(defense.get("spotlight")))
+    else:
+        result, contexts = bot.answer(
+            query, injected_docs=injected_docs, spotlight=bool(defense.get("spotlight"))
+        )
 
     # --- output rail ---
     if defense.get("output"):
-        allowed, _ = apply_output_rail(result.text, judge_model)
+        with call_role("guard"):
+            allowed, _ = apply_output_rail(result.text, judge_model)
         if not allowed:
             return {"answer": REFUSAL_MESSAGE, "blocked": True, "stage": "output",
-                    "result": result, "contexts": contexts, "pg_score": score}
+                    "result": result, "contexts": contexts, "pg_score": score,
+                    "n_removed": n_removed}
 
     return {"answer": result.text, "blocked": False, "stage": "none",
-            "result": result, "contexts": contexts, "pg_score": score}
+            "result": result, "contexts": contexts, "pg_score": score,
+            "n_removed": n_removed}
 
 
 def _blocked(stage: str, pg_score=None):
     return {"answer": REFUSAL_MESSAGE, "blocked": True, "stage": stage,
-            "result": None, "contexts": [], "pg_score": pg_score}
+            "result": None, "contexts": [], "pg_score": pg_score, "n_removed": 0}
 
 
 def guarded_answer(bot, query: str, mode: str, judge_model: str, injected_docs=None):
